@@ -1,7 +1,7 @@
 class ScoreModel {
   final String roomId;
   final String winner;
-  final Map<String, int> scores;
+  final Map<int, int> scores;
 
   ScoreModel({
     required this.roomId,

@@ -1,20 +1,19 @@
 class Player {
-   String? uid;
-   String? name;
-   String? avatar;
-   String? color; // red, blue, green, yellow
+  int? uid;
+  String? name;
+  String? avatar;
+  String? color; // red, blue, green, yellow
   int? score;
   int? movesLeft;
   int? missCount;
   bool? isOnline;
   int? diceMissCount;
 
-
   Player({
-     this.uid,
-     this.name,
-     this.avatar,
-     this.color,
+    this.uid,
+    this.name,
+    this.avatar,
+    this.color,
     this.score = 0,
     this.movesLeft = 100, // Default fixed moves
     this.missCount = 0,
@@ -54,7 +53,7 @@ class Player {
 
   // Create a copy with updated fields
   Player copyWith({
-    String? uid,
+    int? uid,
     String? name,
     String? avatar,
     String? color,

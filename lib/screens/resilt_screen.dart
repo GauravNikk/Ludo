@@ -1,3 +1,4 @@
+import 'package:aag_user/model/player_model.dart';
 import 'package:aag_user/screens/waiting_room_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -29,22 +30,25 @@ class ResultScreen extends StatelessWidget {
               const SizedBox(height: 30),
 
               // Winner Section
-              Obx(() {
-                final winnerIndex = gameController.winner.value;
-                final winner = gameController.player![winnerIndex];
+            Obx(() {
+                final winnerId = gameController.winner.value;
+                Player? winner = gameController.players
+                    .firstWhereOrNull((p) => p.uid == winnerId);
 
                 if (winner != null) {
                   return Column(
                     children: [
                       CircleAvatar(
                         radius: 50,
-                        backgroundColor: _getColorFromString(winner.color),
-                        backgroundImage: winner.avatar.isNotEmpty
-                            ? NetworkImage(winner.avatar)
+                        backgroundColor: _getColorFromString(winner.color!),
+                        backgroundImage: winner.avatar!.isNotEmpty
+                            ? NetworkImage(winner.avatar!)
                             : null,
-                        child: winner.avatar.isEmpty
-                            ? Text(winner.name[0].toUpperCase(),
-                                style: const TextStyle(fontSize: 40))
+                        child: winner.avatar!.isEmpty
+                            ? Text(
+                                winner.name![0].toUpperCase(),
+                                style: const TextStyle(fontSize: 40),
+                              )
                             : null,
                       ),
                       const SizedBox(height: 20),
@@ -60,8 +64,10 @@ class ResultScreen extends StatelessWidget {
                     ],
                   );
                 }
+
                 return const Text('No winner determined');
               }),
+
 
               const SizedBox(height: 40),
               const Text(
@@ -72,20 +78,23 @@ class ResultScreen extends StatelessWidget {
 
               // All Player Scores List
               Obx(() {
-                final player! = gameController.player!.values.toList()
-                  ..sort((a, b) => b.score.compareTo(a.score));
+                final allPlayers = gameController.players.toList()
+                  ..sort((a, b) => b.score!.compareTo(a.score!));
+                allPlayers.sort((a, b) => b.score!.compareTo(a.score!));
 
                 return Column(
-                  children: player!.map((player) {
+                  children: allPlayers.map((player) {
                     return Card(
                       margin: const EdgeInsets.symmetric(vertical: 6),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: _getColorFromString(player.color),
-                          child: Text(player.name[0].toUpperCase()),
+                          backgroundColor: _getColorFromString(player.color!),
+                          child: Text(player.name![0].toUpperCase()),
                         ),
-                        title: Text(player.name),
-                        subtitle: Text('Moves: ${100 - player.movesLeft}/100'),
+                        title: Text(player.name!),
+                        subtitle: Text(
+                          'Moves: ${20 - player.movesLeft!}/20',
+                        ),
                         trailing: Text(
                           '${player.score} pts',
                           style: const TextStyle(

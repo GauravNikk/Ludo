@@ -1,6 +1,6 @@
-
 import 'dart:async';
 import 'dart:math';
+import 'package:aag_user/constta/colors_data.dart';
 import 'package:aag_user/model/player_model.dart';
 import 'package:aag_user/model/score_model.dart';
 import 'package:aag_user/model/theme_model.dart';
@@ -20,9 +20,11 @@ class GameController extends GetxController {
   final ThemeService _themeService = Get.put(ThemeService());
 
   final RxString? roomId = ''.obs;
-  final Rx<Player?> currentPlayer = Rx<Player?>(null);
-  final RxList<Player>? player! = RxList<Player>[].obs;
-  final RxString currentTurn = ''.obs;
+  RxString currentPlayerColor = 'red'.obs; // or whatever your default color is
+
+   Rx<Player> currentPlayer = Player().obs;
+  final RxList<Player> players = <Player>[].obs;
+  final RxInt currentTurn = 0.obs;
   final RxInt diceValue = 0.obs;
   final Rx<DateTime> turnStartedAt = DateTime.now().obs;
   final RxMap<String, List<int>> tokenPositions = <String, List<int>>{}.obs;
@@ -54,24 +56,25 @@ class GameController extends GetxController {
 
   void setupDisconnectHandler() {}
 
-  Future<void> createRoom(String name, String avatar, {String? roomId}) async {
+  Future<void> createRoom(BuildContext context, String name, String avatar, {String? roomId}) async {
     final db = FirebaseDatabase.instance.ref();
     final newRoomId = roomId;
     final roomRef = db.child('rooms').child(newRoomId!);
     final snapshot = await roomRef.get();
 
     if (snapshot.exists) {
-      final playerCount = (snapshot.child('player!').value as Map?)?.length ?? 0;
+      final playerCount = (snapshot.child('player').value as Map?)?.length ?? 0;
 
       if (playerCount < 4) {
         Get.dialog(AlertDialog(
           title: const Text("Room Available"),
-          content: Text("Room $newRoomId already exists with $playerCount player!. Do you want to join?"),
+          content: Text(
+              "Room $newRoomId already exists with $playerCount player!. Do you want to join?"),
           actions: [
             TextButton(
               onPressed: () {
-                Get.back();
-                joinRoom(newRoomId, name, avatar);
+                Navigator.of(context).pop();
+               joinRoom(newRoomId, name, avatar);
               },
               child: const Text("Join Now"),
             ),
@@ -81,12 +84,17 @@ class GameController extends GetxController {
         Get.snackbar("Room Full", "The room already has 4 player!.");
       }
     } else {
-      int uid = DateTime.now().millisecondsSinceEpoch.toString().split('').map(int.parse).reduce((a, b) => a + b);
+      int uid = DateTime.now()
+          .millisecondsSinceEpoch
+          .toString()
+          .split('')
+          .map(int.parse)
+          .reduce((a, b) => a + b);
       final playerData = {
         "uid": uid,
         "name": name,
         "avatar": avatar,
-        "color": getAvailableColor([]),
+        "color": ColorsData().getAvailableColor(),
         "score": 0,
         "movesLeft": 0,
         "missCount": 0,
@@ -97,11 +105,12 @@ class GameController extends GetxController {
         "id": newRoomId,
         "turn": uid,
         "turnTimeLeft": 15,
-        "player!": {uid: playerData},
+        "player": {uid: playerData},
       });
 
       roomId = newRoomId;
-      player![uid] = Player.fromJson(playerData);
+      // players[uid] = Player.fromJson(playerData);
+      players.add(Player.fromJson(playerData));
 
       Get.dialog(AlertDialog(
         title: const Text("Room Created"),
@@ -109,7 +118,7 @@ class GameController extends GetxController {
         actions: [
           TextButton(
             onPressed: () {
-              Get.back();
+              Navigator.of(context).pop();
               listenToRoom();
             },
             child: const Text("Join Now"),
@@ -119,17 +128,63 @@ class GameController extends GetxController {
     }
   }
 
-  String getAvailableColor(List<String> usedColors) {
-    final colors = ['red', 'blue', 'green', 'yellow'];
-    return colors.firstWhere((c) => !usedColors.contains(c), orElse: () => 'grey');
+
+
+
+ void listenToRoom() {
+    final db = FirebaseDatabase.instance.ref();
+
+    final roomRef = db.child('rooms').child(roomId!.value);
+
+    roomRef.onValue.listen((event) {
+      final data = event.snapshot.value as Map;
+     print("Room Data: $data");
+      print("Players fetched: ${players.length}");
+      // Players
+      final playerData = data['player'] as Map?;
+      if (playerData != null) {
+        players.clear();
+        playerData.forEach((key, value) {
+          final playerJson = Map<String, dynamic>.from(value);
+          players.add(Player.fromJson(playerJson));
+        });
+      }
+
+      // Winner
+      if (data['winner'] != null && data['winner'].toString().isNotEmpty) {
+        winner.value = data['winner'].toString();
+        _goToResultScreen();
+      }
+
+      // Turn timer
+      if (data['turnTimeLeft'] != null) {
+        turnTimeLeft.value = data['turnTimeLeft'];
+      }
+       if (data == null) return;
+
+      // Turn
+      if (data['turn'] != null) {
+        currentTurn.value = data['turn'];
+      }
+
+    });
   }
 
-  Future<bool> joinRoom(String roomIdToJoin, String nickname, String avatar) async {
-    final String uid = DateTime.now().millisecondsSinceEpoch.toString();
+  Future<bool> joinRoom(
+      String roomIdToJoin, String nickname, String avatar) async {
+    final int uid = DateTime.now()
+        .millisecondsSinceEpoch
+        .toString()
+        .split('')
+        .map(int.parse)
+        .reduce((a, b) => a + b);
     final String color = _getAvailableColor();
-    final Player player = Player(uid: uid, name: nickname, avatar: avatar, color: color);
+    final Player player =
+        Player(uid: uid, name: nickname, avatar: avatar, color: color);
     currentPlayer.value = player;
     final success = await _firebaseService.joinRoom(roomIdToJoin, player);
+
+print("success: $success");
 
     if (success) {
       _listenToRoomChanges();
@@ -140,25 +195,53 @@ class GameController extends GetxController {
   }
 
   void _listenToRoomChanges() {
+    print("_listenToRoomChanges called");
+
     _firebaseService.listenToRoom().listen((event) {
       if (event.snapshot.value != null) {
         final data = event.snapshot.value as Map<dynamic, dynamic>;
 
-        if (data['player!'] != null) {
-          final playersData = data['player!'] as Map<dynamic, dynamic>;
-          player!!.clear();
+        print("_listenToRoomChanges called");
+        print("Room Data: $data");
+        print("Players fetched: ${players.length}");
+        print("Current Player: ${currentPlayer.value}");
+        print("Current Turn: ${currentTurn.value}");
+        print("Dice Value: ${diceValue.value}");
+        print("Turn Started At: ${turnStartedAt.value}");
+        print("Token Positions: ${tokenPositions}");
+        print("Winner: ${winner.value}");
+        print("Is Game Started: ${isGameStarted.value}");
+        print("Is Dice Rolling: ${isDiceRolling.value}");
+        print("Can Roll Dice: ${canRollDice.value}");
+        print("Is Waiting For Move: ${isWaitingForMove.value}");
+        print("Turn Time Left: ${turnTimeLeft.value}");
+        print("Current Theme: ${currentTheme.value}");
+        print("Room ID: ${roomId?.value}");
 
-          playersData.forEach((key, value) {
-            final player = value;
-            player!!= player;
+        if (data['player'] != null) {
+          final playersData = data['player'] as Map<dynamic, dynamic>;
+          players.clear();
+
+          // playersData.forEach((key, value) {
+          //   final playerMap = Map<String, dynamic>.from(value);
+          //   final player = Player.fromJson(playerMap);
+          //   players.add(player); 
+          // });
+
+         playersData.forEach((key, value) {
+            final playerMap = Map<String, dynamic>.from(value);
+            final player = Player.fromJson(playerMap);
+            print("Parsed Player: ${player.name} (uid: ${player.uid})");
+            players.add(player);
           });
+
         }
 
         if (data['gameState'] != null) {
           final gameState = data['gameState'] as Map<dynamic, dynamic>;
 
           if (gameState['currentTurn'] != null) {
-            currentTurn.value = gameState['currentTurn'].toString();
+            currentTurn.value = gameState['currentTurn'];
           }
 
           if (gameState['diceValue'] != null) {
@@ -166,16 +249,19 @@ class GameController extends GetxController {
           }
 
           if (gameState['turnStartedAt'] != null) {
-            turnStartedAt.value = DateTime.fromMillisecondsSinceEpoch(gameState['turnStartedAt'] as int);
+            turnStartedAt.value = DateTime.fromMillisecondsSinceEpoch(
+                gameState['turnStartedAt'] as int);
             _resetTurnTimer();
           }
 
           if (gameState['tokenPositions'] != null) {
-            final positions = gameState['tokenPositions'] as Map<dynamic, dynamic>;
+            final positions =
+                gameState['tokenPositions'] as Map<dynamic, dynamic>;
             tokenPositions.clear();
 
             positions.forEach((key, value) {
-              final colorPositions = (value as List<dynamic>).map((e) => e as int).toList();
+              final colorPositions =
+                  (value as List<dynamic>).map((e) => e as int).toList();
               tokenPositions[key.toString()] = colorPositions;
             });
           }
@@ -194,19 +280,19 @@ class GameController extends GetxController {
   void _startWaitingTimer() {
     _waitingTimer?.cancel();
     _waitingTimer = Timer(const Duration(seconds: 15), () {
-      if (player!.length == 1 && winner.value.isEmpty) {
-        _declareWinner(player!.keys.first);
-      } else if (player!.length > 1 && !isGameStarted.value) {
+      if (players.length == 1 && winner.value.isEmpty) {
+        _declareWinner(players.first.uid!);
+      } else if (players.length > 1 && !isGameStarted.value) {
         startGame();
       }
     });
   }
 
-  startGame() {
+  void startGame() {
     if (isGameStarted.value) return;
 
     isGameStarted.value = true;
-    final firstPlayerId = player!.keys.first;
+    final firstPlayerId = players.first.uid!;
     _firebaseService.updateCurrentTurn(firstPlayerId);
     Get.off(() => const GameScreen());
   }
@@ -230,19 +316,23 @@ class GameController extends GetxController {
   void _handleMissedTurn() {
     if (currentPlayer.value == null) return;
 
-    final player = player[]!;
-    player.missCount++;
-    _firebaseService.updatePlayer(player);
+    final p = players.firstWhere(
+      (p) => p.uid == currentPlayer.value!.uid,
+      orElse: () => Player(),
+    );
 
-    if (player.missCount >= 3) {
-      _eliminatePlayer(player.uid!);
+    p.missCount = (p.missCount ?? 0) + 1;
+    _firebaseService.updatePlayer(p);
+
+    if (p.missCount! >= 3) {
+      _eliminatePlayer(p.uid!);
     } else {
       _passTurnToNextPlayer();
     }
   }
 
-  void _eliminatePlayer(String playerId) {
-    if (player!.length <= 2) {
+  void _eliminatePlayer(int playerId) {
+    if (players!.length <= 2) {
       _declareLastPlayerWinner();
     } else {
       _passTurnToNextPlayer();
@@ -250,7 +340,9 @@ class GameController extends GetxController {
   }
 
   void _passTurnToNextPlayer() {
-    final playerIds = player!.keys.toList();
+    if (players.isEmpty) return;
+
+    final playerIds = players.map((p) => p.uid!).toList();
     final currentIndex = playerIds.indexOf(currentTurn.value);
     final nextIndex = (currentIndex + 1) % playerIds.length;
     final nextPlayerId = playerIds[nextIndex];
@@ -315,6 +407,30 @@ class GameController extends GetxController {
     return true;
   }
 
+  Future<void> _checkForCaptures(String color, int position) async {
+    if (_isSafePosition(position)) return;
+
+    for (final otherColor in tokenPositions.keys) {
+      if (otherColor == color) continue;
+
+      final otherPositions = List<int>.from(tokenPositions[otherColor]!);
+
+      for (int i = 0; i < otherPositions.length; i++) {
+        if (otherPositions[i] == position && otherPositions[i] != 0) {
+          otherPositions[i] = 0;
+          tokenPositions[otherColor] = otherPositions;
+          await _firebaseService.updateTokenPositions(
+              otherColor, otherPositions);
+          await _updateScore(color, 2);
+        }
+      }
+    }
+  }
+
+  bool _isSafePosition(int position) {
+    return [8, 13, 21, 26, 34, 39, 47].contains(position);
+  }
+
   Future<void> moveToken(int tokenIndex) async {
     if (!isWaitingForMove.value || currentPlayer.value == null) return;
 
@@ -324,7 +440,7 @@ class GameController extends GetxController {
     int newPosition = currentPosition + diceValue.value;
 
     positions[tokenIndex] = newPosition;
-    tokenPositions[color] = positions;
+    tokenPositions[color!] = positions;
 
     await _firebaseService.updateTokenPositions(color, positions);
     await _checkForCaptures(color, newPosition);
@@ -340,123 +456,89 @@ class GameController extends GetxController {
     }
   }
 
-  Future<void> _checkForCaptures(String color, int position) async {
-    if (_isSafePosition(position)) return;
-
-    for (final otherColor in tokenPositions.keys) {
-      if (otherColor == color) continue;
-
-      final otherPositions = List<int>.from(tokenPositions[otherColor]!);
-
-      for (int i = 0; i < otherPositions.length; i++) {
-        if (otherPositions[i] == position && otherPositions[i] != 0) {
-          otherPositions[i] = 0;
-          tokenPositions[otherColor] = otherPositions;
-          await _firebaseService.updateTokenPositions(otherColor, otherPositions);
-          await _updateScore(color, 2);
-        }
-      }
-    }
-  }
-
-  bool _isSafePosition(int position) {
-    return [8, 13, 21, 26, 34, 39, 47].contains(position);
-  }
-
   Future<void> _updateScore(String color, int points) async {
-    final playerEntry = player!.entries.firstWhere(
-      (entry) => entry.value.color == color,
-      orElse: () => MapEntry('', Player(uid: '', name: '', avatar: '', color: '')),
-    );
+    final playerIndex = players.indexWhere((p) => p.color == color);
+    if (playerIndex == -1) return;
 
-    if (playerEntry.key.isEmpty) return;
+    final updatedPlayer = players[playerIndex];
 
-    final player = playerEntry.value;
-    player.score += points;
-    player.movesLeft--;
+    updatedPlayer.score = (updatedPlayer.score ?? 0) + points;
+    updatedPlayer.movesLeft = (updatedPlayer.movesLeft ?? 0) - 1;
 
-    player![playerEntry.key] = player;
-    await _firebaseService.updatePlayer(player);
+    players[playerIndex] = updatedPlayer;
+    await _firebaseService.updatePlayer(updatedPlayer);
   }
 
   Future<void> _checkCompletionStatus(String color) async {
-    final playerEntry = player!.entries.firstWhere(
-      (entry) => entry.value.color == color,
-      orElse: () => MapEntry('', Player(uid: '', name: '', avatar: '', color: '')),
-    );
+    final playerIndex = players.indexWhere((p) => p.color == color);
+    if (playerIndex == -1) return;
 
-    if (playerEntry.key.isEmpty) return;
+    final current = players[playerIndex];
 
-    final player = playerEntry.value;
-
-    if (player.movesLeft <= 0) {
-      bool allCompleted = true;
-
-      for (final otherPlayer in player!.values) {
-        if (otherPlayer.movesLeft > 0) {
-          allCompleted = false;
-          break;
-        }
-      }
+    if (current.movesLeft! <= 0) {
+      bool allCompleted = players.every((p) => p.movesLeft! <= 0);
 
       if (allCompleted) {
         Player? highestScorer;
 
-        for (final p in player!.values) {
-          if (highestScorer == null || p.score > highestScorer.score) {
+        for (final p in players) {
+          if (highestScorer == null || p.score! > highestScorer.score!) {
             highestScorer = p;
           }
         }
 
         if (highestScorer != null) {
-          _declareWinner(highestScorer.uid);
+          _declareWinner(highestScorer.uid!);
         }
       }
     }
   }
 
   void _checkGameState() {
-    int onlinePlayers = 0;
-    String lastOnlinePlayerId = '';
+    final onlinePlayers = players.where((p) => p.isOnline!).toList();
 
-    for (final entry in player!.entries) {
-      if (entry.value.isOnline) {
-        onlinePlayers++;
-        lastOnlinePlayerId = entry.key;
-      }
+    if (onlinePlayers.length == 1 &&
+        isGameStarted.value &&
+        winner.value.isEmpty) {
+      _declareWinner(onlinePlayers.first.uid!);
     }
+  }
 
-    if (onlinePlayers == 1 && isGameStarted .value && winner.value.isEmpty) {
-      _declareWinner(lastOnlinePlayerId);
-    }
+  void _declareWinner(int playerId) {
+    _firebaseService.setWinner(playerId);
+    winner.value = playerId.toString();
+    _goToResultScreen();
+  }
+
+  String _generateRoomId() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    return List.generate(6, (index) => chars[_random.nextInt(chars.length)])
+        .join();
   }
 
   void _declareLastPlayerWinner() {
-    for (final entry in player!.entries) {
-      if (entry.value.isOnline && entry.value.missCount < 3) {
-        _declareWinner(entry.key);
+    if (players == null || players!.isEmpty) return;
+
+    for (final entry in players) {
+      final player = entry;
+      if (player!.isOnline! && player.missCount! < 3) {
+        _declareWinner(entry.uid!);
         break;
       }
     }
-  }
-
-  void _declareWinner(String playerId) {
-    _firebaseService.setWinner(playerId);
-    winner.value = playerId;
-    _goToResultScreen();
   }
 
   void _goToResultScreen() {
     _turnTimer?.cancel();
     _waitingTimer?.cancel();
 
-    final Map<String, int> scores = {};
-    for (final entry in player!.entries) {
-      scores[entry.key] = entry.value.score;
-    }
+    final Map<int, int> scores = {
+      for (var p in players)
+        if (p.uid != null) p.uid!: p.score ?? 0,
+    };
 
     final scoreModel = ScoreModel(
-      roomId: roomId!.value ?? '',
+      roomId: roomId?.value ?? '',
       winner: winner.value,
       scores: scores,
     );
@@ -465,22 +547,14 @@ class GameController extends GetxController {
     Get.off(() => ResultScreen());
   }
 
-  String _generateRoomId() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    return List.generate(6, (index) => chars[_random.nextInt(chars.length)]).join();
-  }
-
   String _getAvailableColor() {
     final availableColors = ['red', 'blue', 'green', 'yellow'];
-    final usedColors = player!.values.map((p) => p.color).toList();
+    final usedColors = players.map((p) => p.color).toList();
 
-    for (final color in availableColors) {
-      if (!usedColors.contains(color)) {
-        return color;
-      }
-    }
-
-    return availableColors.first;
+    return availableColors.firstWhere(
+      (color) => !usedColors.contains(color),
+      orElse: () => availableColors.first,
+    );
   }
 
   Future<void> _loadTheme(String themeName) async {
@@ -488,10 +562,13 @@ class GameController extends GetxController {
   }
 
   bool isMyTurn() {
-    return currentPlayer.value != null && currentTurn.value == currentPlayer.value!.uid;
+    return currentPlayer.value != null &&
+        currentTurn.value == currentPlayer.value!.uid;
   }
 
   bool canMoveToken(int tokenIndex) {
-    return isMyTurn() && isWaitingForMove.value && _canMoveToken(tokenIndex, diceValue.value);
+    return isMyTurn() &&
+        isWaitingForMove.value &&
+        _canMoveToken(tokenIndex, diceValue.value);
   }
 }

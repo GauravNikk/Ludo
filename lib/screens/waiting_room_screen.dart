@@ -1,3 +1,5 @@
+import 'dart:ffi';
+
 import 'package:aag_user/controllers/game_controller.dart';
 import 'package:aag_user/screens/game_screen.dart';
 import 'package:device_info_plus/device_info_plus.dart';
@@ -54,26 +56,32 @@ class _WaitingScreenState extends State<WaitingScreen> {
               onPressed: () async {
                 final code = codeController.text.trim();
                 if (code.length == 4) {
-                  final roomSnapshot =
-                      await FirebaseDatabase.instance.ref('rooms/$code').get();
+                  int roomCode = int.tryParse(code) ?? 0;
+                  final roomSnapshot = await FirebaseDatabase.instance
+                      .ref('rooms/$roomCode')
+                      .get();
 
                   if (!roomSnapshot.exists) {
                     // Room doesn't exist, create it
                     await gameController.createRoom(
+                      context,
                       deviceName,
                       'https://avatar.iran.liara.run/public',
                       roomId: code,
                     );
-                    Get.back();
+                    Navigator.of(context).pop();
                   } else {
-                    final player! = roomSnapshot.child('player!').value as Map?;
-                    if (player! != null && player!.length < 4) {
+                    final playersMap =
+                        roomSnapshot.child('player').value as Map?;
+                    if (playersMap != null && playersMap.length < 4) {
                       // Room exists and has space
                       _showAvailableDialog(code, deviceName);
                     } else {
-                      // Room full
                       Get.snackbar(
-                          "Room Full", "This room already has 4 player!.");
+                        "Room Full",
+                        "This room already has 4 players.",
+                        snackPosition: SnackPosition.BOTTOM,
+                      );
                     }
                   }
                 }
@@ -95,18 +103,19 @@ class _WaitingScreenState extends State<WaitingScreen> {
         actions: [
           TextButton(
             onPressed: () {
-              Get.back();
+              Navigator.of(Get.context!).pop();
             },
             child: const Text("Cancel"),
           ),
           TextButton(
             onPressed: () async {
+              Navigator.of(context).pop(); // Close the previous dialog
               await gameController.joinRoom(
                 code,
                 deviceName,
                 'https://avatar.iran.liara.run/public',
               );
-              Get.back(); // Close dialog
+              Navigator.of(Get.context!).pop(); // Close dialog
             },
             child: const Text("Join Now"),
           ),
@@ -129,7 +138,7 @@ class _WaitingScreenState extends State<WaitingScreen> {
             child: Padding(
               padding: const EdgeInsets.all(20.0),
               child: Obx(() {
-                if (gameController.roomId!.value != null) {
+                if (gameController.players.isNotEmpty) {
                   return _buildRoomInfo(gameController, isWide);
                 } else {
                   return const CircularProgressIndicator();
@@ -142,31 +151,31 @@ class _WaitingScreenState extends State<WaitingScreen> {
     );
   }
 
-  Widget _buildRoomInfo(GameController gameController, bool isWide) {
+  Widget _buildRoomInfo(GameController controller, bool isWide) {
     return isWide
         ? Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _roomDetails(gameController),
-              _playerList(gameController),
+              _roomDetails(controller),
+              _playerList(controller),
             ],
           )
         : Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _roomDetails(gameController),
+              _roomDetails(controller),
               const SizedBox(height: 30),
-              _playerList(gameController),
+              _playerList(controller),
             ],
           );
   }
 
-  Widget _roomDetails(GameController gameController) {
+  Widget _roomDetails(GameController controller) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         const Text(
-          'Waiting for player! to join...',
+          'Waiting for players to join...',
           style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 20),
@@ -179,7 +188,7 @@ class _WaitingScreenState extends State<WaitingScreen> {
           child: Column(
             children: [
               Text(
-                'Room ID: ${gameController.roomId}',
+                'Room ID: ${controller.roomId?.value ?? ""}',
                 style:
                     const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
@@ -189,8 +198,10 @@ class _WaitingScreenState extends State<WaitingScreen> {
         ),
         const SizedBox(height: 20),
         Obx(() {
-          final timeLeft = gameController.turnTimeLeft.value;
-          if (gameController.player!.length == 1) {
+          final players = controller.players;
+          final timeLeft = controller.turnTimeLeft.value;
+
+          if (players.length == 1) {
             return Column(
               children: [
                 Text(
@@ -203,10 +214,10 @@ class _WaitingScreenState extends State<WaitingScreen> {
                 ),
               ],
             );
-          } else if (gameController.player!.length > 1) {
+          } else if (players.length > 1) {
             return ElevatedButton(
               onPressed: () {
-                gameController.startGame();
+                controller.startGame();
                 Get.off(() => const GameScreen());
               },
               child: const Text('Start Game'),
@@ -218,7 +229,7 @@ class _WaitingScreenState extends State<WaitingScreen> {
     );
   }
 
-  Widget _playerList(GameController gameController) {
+  Widget _playerList(GameController controller) {
     return Column(
       children: [
         const Text(
@@ -227,13 +238,13 @@ class _WaitingScreenState extends State<WaitingScreen> {
         ),
         const SizedBox(height: 10),
         Obx(() => Column(
-              children: gameController.player!.values.map((player) {
+              children: controller.players.map((player) {
                 return ListTile(
                   leading: CircleAvatar(
-                    backgroundColor: _getColorFromString(player.color),
-                    child: Text(player.name.substring(0, 1).toUpperCase()),
+                    backgroundColor: _getColorFromString(player.color!),
+                    child: Text(player.name!.substring(0, 1).toUpperCase()),
                   ),
-                  title: Text(player.name),
+                  title: Text(player.name!),
                   trailing: Icon(
                     Icons.circle,
                     color: player.isOnline! ? Colors.green : Colors.red,

@@ -9,10 +9,11 @@ class FirebaseService extends GetxService {
   String? _userId;
 
   // Initialize room reference
-  void initRoom(String roomId, String userId) {
+  void initRoom(String roomId, int userId) {
     _roomId = roomId;
-    _userId = userId;
+    _userId = userId.toString();
     _roomRef = _database.ref().child('rooms').child(roomId);
+    
   }
 
   // Create a new game room
@@ -21,7 +22,7 @@ class FirebaseService extends GetxService {
 
     // Initialize game state
     await roomRef.set({
-      'player!': {
+      'player': {
         player.uid!: player.toJson(),
       },
       'gameState': {
@@ -40,7 +41,7 @@ class FirebaseService extends GetxService {
     });
 
     // Initialize room reference and user ID
-    initRoom(roomId, player.uid!!);
+    initRoom(roomId, player.uid!);
   }
 
   // Join an existing room
@@ -57,8 +58,8 @@ class FirebaseService extends GetxService {
         .ref()
         .child('rooms')
         .child(roomId)
-        .child('player!')
-        .child(player.uid!)
+        .child('player')
+        .child(player.uid!.toString())
         .set(player.toJson());
 
     // Initialize room reference and user ID
@@ -73,7 +74,7 @@ class FirebaseService extends GetxService {
 
   // Listen to specific player changes
   Stream<DatabaseEvent> listenToPlayer(String playerId) {
-    return _roomRef.child('player!').child(playerId).onValue;
+    return _roomRef.child('player').child(playerId).onValue;
   }
 
   // Listen to game state changes
@@ -83,14 +84,14 @@ class FirebaseService extends GetxService {
 
   // Update player data
   Future<void> updatePlayer(Player player) async {
-    await _roomRef.child('player!').child(player.uid!).update(player.toJson());
+    await _roomRef.child('player').child(player.uid!.toString()).update(player.toJson());
   }
 
   // Update player's online status
   Future<void> updatePlayerOnlineStatus(bool isOnline) async {
     if (_userId != null) {
       await _roomRef
-          .child('player!')
+          .child('player')
           .child(_userId!)
           .child('isOnline')
           .set(isOnline);
@@ -106,7 +107,7 @@ class FirebaseService extends GetxService {
   }
 
   // Update current turn
-  Future<void> updateCurrentTurn(String playerId) async {
+  Future<void> updateCurrentTurn(int playerId) async {
     await _roomRef.child('gameState').update({
       'currentTurn': playerId,
       'turnStartedAt': ServerValue.timestamp,
@@ -123,7 +124,7 @@ class FirebaseService extends GetxService {
   }
 
   // Set the winner
-  Future<void> setWinner(String userId) async {
+  Future<void> setWinner(int userId) async {
     await _roomRef.child('winner').set(userId);
   }
 
