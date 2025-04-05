@@ -1,0 +1,60 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+    id "com.google.gms.google-services"
+}
+
+android {
+    namespace = "com.example.aag_user"//com.example.aag_user
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+    // ndkVersion = "25.1.8937393"
+
+    compileOptions {
+                coreLibraryDesugaringEnabled true
+
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        applicationId = "com.example.aag_user"
+       minSdkVersion 23  
+    targetSdkVersion flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    signingConfigs {
+        release {
+            storeFile file("aag.jks") 
+            storePassword System.getenv("AAG_KEYSTORE_PASSWORD") ?: "1234@aag"
+            keyAlias System.getenv("AAG_KEY_ALIAS") ?: "aag"
+            keyPassword System.getenv("AAG_KEY_PASSWORD") ?: "1234@aag"
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            shrinkResources true
+            // proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.3' 
+    implementation(platform("com.google.firebase:firebase-bom:33.11.0"))
+}
+
+
+flutter {
+    source = "../.."
+}

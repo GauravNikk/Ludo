@@ -1,0 +1,48 @@
+name: aag_user
+description: "A new Flutter project."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # UI & Icons
+  cupertino_icons: ^1.0.8
+  flutter_svg: ^2.0.9
+  lottie: ^3.1.0
+  cached_network_image: ^3.3.1
+
+  # State Management
+  get: ^4.6.6
+
+  # Firebase Core
+  firebase_core: 
+  firebase_database: 
+  # firebase_auth:
+  device_info_plus:
+
+  # Networking
+  http: ^1.2.1
+
+  # Utility
+  intl: ^0.18.1
+  connectivity_plus: ^5.0.2
+  path_provider: ^2.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/themes/
+    # - assets/themes/ice/
+    # - assets/themes/fire/
+   
